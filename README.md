@@ -2,6 +2,8 @@
 
 **Versión 1.0.0**
 
+*Lumen* es la palabra en latín para "luz". El nombre está pensado para la tienda de iluminación y ferretería para la que se desarrolló este sistema.
+
 Automatización de escritorio que reemplaza un proceso manual y repetitivo: tomar la lista de precios que manda cada proveedor (en cualquier formato de Excel que traiga) y convertirla a los formatos internos de trabajo. Lo que antes llevaba armar a mano, columna por columna, producto por producto, ahora se hace en segundos.
 
 ## Capturas
