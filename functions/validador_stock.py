@@ -24,6 +24,8 @@ import re
 import openpyxl
 import pandas as pd
 
+from functions.calculadora_precios import calcular_precio_total, parsear_porcentajes_encadenados
+
 CANTIDAD_FILAS_A_REVISAR_ANTES_DE_CORTAR = 3
 TOLERANCIA_COMPARACION_PRECIOS = 0.01
 MAXIMO_ERRORES_A_MOSTRAR = 20
@@ -127,20 +129,6 @@ def _extraer_productos_esperados(todas_las_filas, idx_codigo, idx_producto, idx_
 
     return productos_esperados
 
-
-def _calcular_precio_esperado(precio_origen, descuentos, aumentos, vendedor_factor, dolar_valor):
-    """Replica, en el mismo orden, las cuentas que hace el exportador para llegar a 'precio2'."""
-    precio = precio_origen
-    for descuento in descuentos:
-        precio = round(precio * (1 - descuento / 100), 2)
-    for aumento in aumentos:
-        precio = round(precio * (1 + aumento / 100), 2)
-    precio = round(precio * (vendedor_factor / 100), 2)
-    if dolar_valor:
-        precio = round(precio * dolar_valor, 2)
-    return round(precio, 2)
-
-
 # ─────────────────────────────────────────────────────────────────────────
 # Validación principal
 # ─────────────────────────────────────────────────────────────────────────
@@ -197,8 +185,8 @@ def validar_exportacion(
     print(f"✓ Archivo Stock Fácil: {len(df_stock)} filas encontradas.")
 
     # Parsear descuentos/aumentos tal como los ingresó el usuario en la interfaz
-    descuentos = [float(x) for x in texto_descuento.split("-") if x.strip()] if texto_descuento else []
-    aumentos = [float(x) for x in texto_aumento.split("-") if x.strip()] if texto_aumento else []
+    descuentos = parsear_porcentajes_encadenados(texto_descuento)
+    aumentos = parsear_porcentajes_encadenados(texto_aumento)
     vendedor_factor = float(porcentaje_vendedor or 0)
     dolar_valor = float(valor_dolar) if (esta_en_dolares and valor_dolar) else None
 
@@ -247,10 +235,9 @@ def validar_exportacion(
         # Validar precio2 (resultado final, con descuento/aumento/vendedor/dólar aplicados)
         try:
             precio2_stock = float(fila_stock.get("precio2", 0))
-            precio2_esperado = _calcular_precio_esperado(
+            precio2_esperado = calcular_precio_total(
                 precio_orig, descuentos, aumentos, vendedor_factor, dolar_valor,
             )
-
             if abs(precio2_stock - precio2_esperado) > TOLERANCIA_COMPARACION_PRECIOS:
                 errores.append(
                     f"Código [{codigo_orig}]: Error matemático en 'precio2'.\n"

@@ -1,18 +1,33 @@
+"""
+convertidor.py
+
+Vista principal de la app: el formulario donde el usuario elige el
+Excel del proveedor, indica qué columna es cada cosa (Código, Producto,
+Precio, Familia), configura descuento/aumento/% vendedor/dólar, y
+dispara la conversión.
+
+La conversión en sí (leer el Excel, generar los distintos formatos de
+salida y validarlos) se corre en un hilo aparte para no congelar la
+interfaz, y el progreso se muestra en un pop-up con barra de progreso.
+"""
+
 import os
 import threading
-import customtkinter as ctk
-from tkinter import filedialog, ttk, messagebox
+from tkinter import filedialog, messagebox, ttk
 
+import customtkinter as ctk
+
+from functions.config_manager import obtener_valor
+from functions.exportador import exportar_stock_facil, exportar_vendedor
 from functions.lector_excel import detectar_columnas
 from functions.preparar_excel import preparar_excel
 from functions.procesador import procesar_excel
-from functions.exportador import exportar_vendedor
-from functions.config_manager import *
-from functions.exportador import exportar_stock_facil
+from functions.calculadora_precios import calcular_precio_total, parsear_porcentajes_encadenados
 
 COLOR_TARJETA = ("gray90", "#242424")
 COLOR_BORDE = ("gray80", "#333333")
 COLOR_TITULO_SECCION = "gray"
+
 
 class ConvertidorView(ctk.CTkFrame):
     def __init__(self, master):
@@ -225,6 +240,7 @@ class ConvertidorView(ctk.CTkFrame):
         ).grid(row=fila, column=columna, sticky="w", padx=(0, 8), pady=(0, 4))
 
     def _input_con_prefijo(self, padre, prefijo, fila, columna, valor_inicial="", deshabilitado=False):
+        """Caja tipo '$ [___]', usada para el valor del dólar."""
         caja = ctk.CTkFrame(padre, height=34, corner_radius=8, fg_color=("gray85", "gray20"))
         caja.grid(row=fila, column=columna, sticky="ew", padx=(0, 8), pady=(0, 12))
         caja.grid_propagate(False)
@@ -244,6 +260,7 @@ class ConvertidorView(ctk.CTkFrame):
         return entry
 
     def _input_con_sufijo(self, padre, sufijo, fila, columna, valor_inicial="", encadenado=False):
+        """Caja tipo '[___] %', usada para descuento, aumento y % vendedor."""
         validador = (
             self._validar_porcentaje_encadenado_cmd if encadenado else self._validar_numero_cmd
         )
@@ -270,6 +287,8 @@ class ConvertidorView(ctk.CTkFrame):
     # ==================================================================
 
     def _estilizar_combobox(self):
+        """ttk no respeta el tema de customtkinter por defecto, así que se
+        pisa manualmente el estilo del Combobox para que combine con el resto."""
         estilo = ttk.Style()
         estilo.theme_use("clam")
         estilo.configure(
@@ -289,10 +308,11 @@ class ConvertidorView(ctk.CTkFrame):
         self.option_add("*TCombobox*Listbox.font", ("Segoe UI", 13))
 
     # ==================================================================
-    #  ACCIONES Y VALIDACIONES
+    #  SELECCIÓN DE ARCHIVO Y AUTOCOMPLETADO
     # ==================================================================
 
     def seleccionar_archivo(self):
+        """Abre el diálogo de selección, prepara el Excel (convierte/recalcula) y autocompleta columnas."""
         ruta = filedialog.askopenfilename(
             title="Seleccionar archivo Excel",
             filetypes=[("Archivos de Excel", "*.xlsx *.xls")],
@@ -328,6 +348,7 @@ class ConvertidorView(ctk.CTkFrame):
         self._autocompletar_columnas(ruta)
 
     def _autocompletar_columnas(self, ruta_archivo):
+        """Usa detectar_columnas para precargar los dropdowns; el usuario puede corregirlos a mano."""
         columnas = detectar_columnas(ruta_archivo)
         if columnas["codigo"]:
             self.dropdown_codigo.set(columnas["codigo"])
@@ -337,8 +358,12 @@ class ConvertidorView(ctk.CTkFrame):
             self.dropdown_precio.set(columnas["precio"])
         if columnas["familia"]:
             self.dropdown_familia.set(columnas["familia"])
-            self.check_familia.select()   
+            self.check_familia.select()
             self.toggle_familia()
+
+    # ==================================================================
+    #  TOGGLES Y VALIDACIONES DE INPUT
+    # ==================================================================
 
     def toggle_familia(self):
         estado = "readonly" if self.check_familia.get() == 1 else "disabled"
@@ -349,22 +374,24 @@ class ConvertidorView(ctk.CTkFrame):
         self.input_dolar.configure(state=estado)
 
     def _validar_numero(self, texto_nuevo):
+        """Valida mientras se tipea: solo dígitos y un único punto decimal."""
         if texto_nuevo == "":
             return True
         return texto_nuevo.replace(".", "", 1).isdigit()
 
     def _validar_porcentaje_encadenado(self, texto_nuevo):
+        """Valida mientras se tipea: dígitos, puntos y guiones (para porcentajes encadenados tipo "29-3-3")."""
         if texto_nuevo == "":
             return True
         caracteres_validos = set("0123456789.-")
         return all(c in caracteres_validos for c in texto_nuevo)
 
     # ==================================================================
-    #  NUEVO: HILO DE CONVERSIÓN Y POP-UP PROFESIONAL
+    #  CONVERSIÓN: DISPARO DEL HILO Y POP-UP DE PROGRESO
     # ==================================================================
 
     def convertir(self):
-        """Punto de entrada principal. Valida campos en UI y lanza el hilo."""
+        """Punto de entrada principal. Valida campos en la UI y lanza el hilo de conversión."""
         if not self.ruta_archivo:
             print("Falta seleccionar un archivo Excel.")
             return
@@ -396,13 +423,13 @@ class ConvertidorView(ctk.CTkFrame):
         # Deshabilitar botón principal para evitar dobles clics
         self.boton_convertir.configure(state="disabled", text="Procesando...")
 
-        # 1. Crear ventana pop-up de progreso
+        # 1) Crear ventana pop-up de progreso
         popup = ctk.CTkToplevel(self)
         popup.title("Procesando Archivos")
         popup.geometry("380x160")
         popup.resizable(False, False)
         popup.transient(self.master)
-        popup.grab_set()  # Bloquea interacciones con la ventana de atrás
+        popup.grab_set()  # bloquea interacciones con la ventana de atrás
 
         # Centrar el pop-up relativo a la app principal
         popup.update_idletasks()
@@ -412,8 +439,8 @@ class ConvertidorView(ctk.CTkFrame):
 
         # Elementos del pop-up
         lbl_estado = ctk.CTkLabel(
-            popup, text="⏳ Iniciando exportación...", 
-            font=ctk.CTkFont(size=14, weight="bold")
+            popup, text="⏳ Iniciando exportación...",
+            font=ctk.CTkFont(size=14, weight="bold"),
         )
         lbl_estado.pack(pady=(24, 8))
 
@@ -422,30 +449,27 @@ class ConvertidorView(ctk.CTkFrame):
         progress_bar.set(0.1)
 
         btn_cerrar = ctk.CTkButton(
-            popup, text="Cerrar", width=100, 
-            command=popup.destroy, state="disabled"
+            popup, text="Cerrar", width=100,
+            command=popup.destroy, state="disabled",
         )
         btn_cerrar.pack(pady=(12, 0))
 
-        # 2. Arrancar la tarea pesada en un hilo separado para no freezar la UI
+        # 2) Arrancar la tarea pesada en un hilo separado para no congelar la UI
         args = (
             columna_codigo, columna_producto, columna_precio, columna_familia,
             nombre_proveedor, incluir_familia, porcentaje_vendedor, texto_desc,
-            texto_aum, esta_en_dolares, valor_dolar, lbl_estado, progress_bar, btn_cerrar
+            texto_aum, esta_en_dolares, valor_dolar, lbl_estado, progress_bar, btn_cerrar,
         )
         hilo = threading.Thread(target=self._ejecutar_conversion_background, args=args)
         hilo.start()
 
     def _ejecutar_conversion_background(
-        self, col_cod, col_prod, col_prec, col_fam, proveedor, inc_fam, 
-        pct_vendedor, t_desc, t_aum, en_dolar, v_dolar, lbl, pbar, btn
+        self, col_cod, col_prod, col_prec, col_fam, proveedor, inc_fam,
+        pct_vendedor, t_desc, t_aum, en_dolar, v_dolar, lbl, pbar, btn,
     ):
-        """Corre de fondo. Modifica el pop-up de forma segura."""
         try:
-            # PASO 1: Procesar archivo de origen
-            lbl.configure(text="📦 Leyendo y procesando Excel original...")
-            pbar.set(0.25)
-            
+            self.after(0, self._actualizar_progreso, lbl, pbar, "📦 Leyendo y procesando Excel original...", 0.25)
+
             resultado = procesar_excel(
                 self.ruta_archivo, columna_codigo=col_cod,
                 columna_producto=col_prod, columna_precio=col_prec, columna_familia=col_fam,
@@ -453,22 +477,16 @@ class ConvertidorView(ctk.CTkFrame):
             productos = resultado["productos"]
 
             if not productos:
-                lbl.configure(text="⚠️ No hay productos para exportar.")
-                pbar.configure(progress_color="orange")
-                pbar.set(1.0)
-                btn.configure(state="normal")
-                self.boton_convertir.configure(state="normal", text="Convertir")
+                self.after(0, self._actualizar_progreso, lbl, pbar, "⚠️ No hay productos para exportar.", 1.0, "orange")
+                self.after(0, self._finalizar_conversion, btn)
                 return
 
-            # PASO 2: Generar Excel Vendedor
-            lbl.configure(text="🗂️ Generando listas de Vendedor...")
-            pbar.set(0.50)
-            
+            self.after(0, self._actualizar_progreso, lbl, pbar, "🗂️ Generando listas de Vendedor...", 0.50)
+
             carpeta_destino = obtener_valor("ruta_exportacion_vendedor")
             if not carpeta_destino:
-                lbl.configure(text="⚠️ Ruta de exportación vendedor no configurada.")
-                btn.configure(state="normal")
-                self.boton_convertir.configure(state="normal", text="Convertir")
+                self.after(0, self._actualizar_progreso, lbl, pbar, "⚠️ Ruta de exportación vendedor no configurada.")
+                self.after(0, self._finalizar_conversion, btn)
                 return
 
             rutas_exportadas = exportar_vendedor(
@@ -479,32 +497,22 @@ class ConvertidorView(ctk.CTkFrame):
             )
             print(f"Excel generado en:\n{rutas_exportadas['individual']}")
 
-            # PASO 3: Calcular precios finales y armar Stock Fácil
-            lbl.configure(text="⚙️ Exportando formato Stock Fácil...")
-            pbar.set(0.75)
+            self.after(0, self._actualizar_progreso, lbl, pbar, "⚙️ Exportando formato Stock Fácil...", 0.75)
 
-            def _calcular_precio_total(precio_base, descs, aums, pct_v, val_d):
-                p = precio_base
-                for d in descs: p = round(p * (1 - d / 100), 2)
-                for a in aums: p = round(p * (1 + a / 100), 2)
-                p = round(p * (pct_v / 100), 2)
-                if val_d: p = round(p * val_d, 2)
-                return p
-
-            descuentos = [float(x) for x in t_desc.split("-") if x.strip()] if t_desc else []
-            aumentos = [float(x) for x in t_aum.split("-") if x.strip()] if t_aum else []
+            descuentos = parsear_porcentajes_encadenados(t_desc)
+            aumentos = parsear_porcentajes_encadenados(t_aum)
 
             precio_total_por_producto = {
-                prod["codigo"]: _calcular_precio_total(
-                    prod["precio"], descuentos, aumentos, pct_vendedor, v_dolar if en_dolar else None
-                ) for prod in productos
+                prod["codigo"]: calcular_precio_total(
+                    prod["precio"], descuentos, aumentos, pct_vendedor, v_dolar if en_dolar else None,
+                )
+                for prod in productos
             }
 
             ruta_stock = obtener_valor("ruta_exportacion_stock_facil")
             if not ruta_stock:
-                lbl.configure(text="⚠️ Ruta de Stock Fácil no configurada.")
-                btn.configure(state="normal")
-                self.boton_convertir.configure(state="normal", text="Convertir")
+                self.after(0, self._actualizar_progreso, lbl, pbar, "⚠️ Ruta de Stock Fácil no configurada.")
+                self.after(0, self._finalizar_conversion, btn)
                 return
 
             ruta_generada = exportar_stock_facil(
@@ -513,34 +521,38 @@ class ConvertidorView(ctk.CTkFrame):
             )
             print(f"Exportado correctamente a Stock Fácil en:\n{ruta_generada}")
 
-            # PASO 4: Validar consistencia e integridad
-            lbl.configure(text="🔍 Ejecutando validación de consistencia...")
-            pbar.set(0.90)
-            
+            self.after(0, self._actualizar_progreso, lbl, pbar, "🔍 Ejecutando validación de consistencia...", 0.90)
+
             try:
                 from functions.validador_stock import validar_exportacion
                 validar_exportacion(
                     ruta_original=self.ruta_archivo, ruta_stock_facil=ruta_generada,
                     col_codigo=col_cod, col_producto=col_prod, col_precio=col_prec,
                     texto_descuento=t_desc, texto_aumento=t_aum,
-                    porcentaje_vendedor=pct_vendedor, valor_dolar=v_dolar, esta_en_dolares=en_dolar
+                    porcentaje_vendedor=pct_vendedor, valor_dolar=v_dolar, esta_en_dolares=en_dolar,
                 )
-            except Exception as val_err:
-                print(f"⚠️ No se pudo ejecutar la validación: {val_err}")
+            except Exception as error_validacion:
+                print(f"⚠️ No se pudo ejecutar la validación: {error_validacion}")
 
-            # FINALIZADO CON ÉXITO
-            lbl.configure(text="✨ ¡Excels exportados con éxito!")
-            pbar.configure(progress_color="#2FA572")  # Cambia la barra a verde esmeralda
-            pbar.set(1.0)
-            
+            self.after(0, self._actualizar_progreso, lbl, pbar, "✨ ¡Excels exportados con éxito!", 1.0, "#2FA572")
+
         except Exception as e:
-            # Manejo de fallos imprevistos para evitar congelar la ventana
-            lbl.configure(text="❌ Ocurrió un error en el proceso.")
-            pbar.configure(progress_color="red")
-            pbar.set(1.0)
+            self.after(0, self._actualizar_progreso, lbl, pbar, "❌ Ocurrió un error en el proceso.", 1.0, "red")
             print(f"Error crítico en hilo de conversión: {e}")
-            
+
         finally:
-            # Reactivar botones al finalizar
-            btn.configure(state="normal")
-            self.boton_convertir.configure(state="normal", text="Convertir")
+            self.after(0, self._finalizar_conversion, btn)
+
+    def _actualizar_progreso(self, lbl, pbar, texto=None, valor=None, color=None):
+        """Actualiza los widgets del popup de forma segura desde el hilo principal."""
+        if texto is not None:
+            lbl.configure(text=texto)
+        if color is not None:
+            pbar.configure(progress_color=color)
+        if valor is not None:
+            pbar.set(valor)
+
+    def _finalizar_conversion(self, btn):
+        """Reactiva los botones al terminar (éxito, error o corte temprano)."""
+        btn.configure(state="normal")
+        self.boton_convertir.configure(state="normal", text="Convertir")
