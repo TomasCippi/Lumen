@@ -17,8 +17,6 @@ cuenta como coincidencia de "producto", por ejemplo.
 """
 
 import os
-import tempfile
-
 import openpyxl
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -36,46 +34,6 @@ PALABRAS_CLAVE = {
 
 # Cuántas filas iniciales revisamos como candidatas a ser la de encabezados
 FILAS_A_REVISAR_PARA_ENCABEZADOS = 15
-
-
-# ─────────────────────────────────────────────────────────────────────────
-# Conversión de formato
-# ─────────────────────────────────────────────────────────────────────────
-
-def convertir_xls_a_xlsx(ruta_archivo: str) -> str:
-    """
-    Si el archivo es un .xls viejo (formato Excel 97-2003), lo convierte
-    a .xlsx en una carpeta temporal y devuelve la ruta del archivo nuevo.
-    Si el archivo ya es .xlsx (o cualquier otra extensión), devuelve la
-    misma ruta sin tocar nada.
-
-    openpyxl (que usamos en el resto de la app) NO puede leer .xls, por
-    eso hace falta este paso intermedio usando xlrd, que sí sabe leer
-    el formato viejo.
-    """
-    if not ruta_archivo.lower().endswith(".xls"):
-        return ruta_archivo
-
-    import xlrd  # solo se importa si realmente hace falta
-
-    libro_viejo = xlrd.open_workbook(ruta_archivo)
-    hoja_vieja = libro_viejo.sheet_by_index(0)
-
-    libro_nuevo = openpyxl.Workbook()
-    hoja_nueva = libro_nuevo.active
-
-    for num_fila in range(hoja_vieja.nrows):
-        for num_col in range(hoja_vieja.ncols):
-            valor = hoja_vieja.cell_value(num_fila, num_col)
-            hoja_nueva.cell(row=num_fila + 1, column=num_col + 1, value=valor)
-
-    carpeta_temp = tempfile.gettempdir()
-    nombre_base = os.path.splitext(os.path.basename(ruta_archivo))[0]
-    ruta_nueva = os.path.join(carpeta_temp, f"{nombre_base}_convertido.xlsx")
-
-    libro_nuevo.save(ruta_nueva)
-    return ruta_nueva
-
 
 # ─────────────────────────────────────────────────────────────────────────
 # Detección de columnas

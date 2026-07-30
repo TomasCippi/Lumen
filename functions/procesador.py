@@ -111,6 +111,12 @@ def procesar_excel(
     idx_precio = openpyxl.utils.column_index_from_string(columna_precio)
     idx_familia = openpyxl.utils.column_index_from_string(columna_familia) if columna_familia else None
 
+    if idx_codigo is None or idx_producto is None:
+        libro.close()
+        raise ValueError(
+            "Faltan columnas obligatorias: hace falta indicar Código y Producto para procesar el Excel."
+        )
+
     def valor_en(fila_valores, indice):
         """Extrae el valor de una tupla de fila dado un índice de columna (1-based)."""
         if indice is None:

@@ -18,6 +18,10 @@ def parsear_porcentajes_encadenados(texto: str) -> list:
 
 
 def calcular_precio_total(precio_base, descuentos, aumentos, porcentaje_vendedor, valor_dolar=None):
+    if porcentaje_vendedor == 0:
+        import warnings
+        warnings.warn("El porcentaje del vendedor es 0%, el precio final va a dar 0.")
+
     precio = precio_base
     for descuento in descuentos:
         precio = round(precio * (1 - descuento / 100), 2)

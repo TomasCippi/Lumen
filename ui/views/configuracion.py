@@ -7,6 +7,7 @@ Las rutas quedan persistidas con config_manager, así que se recuerdan
 entre sesiones.
 """
 
+import os
 import customtkinter as ctk
 from tkinter import filedialog
 
@@ -85,8 +86,9 @@ class ConfiguracionView(ctk.CTkFrame):
         boton.pack(anchor="w")
 
         # Si ya había una ruta guardada de una sesión anterior, se muestra ya
+        # (solo si la carpeta todavía existe; si no, se deja el botón en blanco)
         ruta_guardada = obtener_valor(clave_config)
-        if ruta_guardada:
+        if ruta_guardada and os.path.isdir(ruta_guardada):
             self._marcar_boton_con_ruta(boton, ruta_guardada)
 
         return boton

@@ -9,9 +9,18 @@ from ui.views.informacion import InformacionView
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
+import sys
+
+def ruta_recurso(ruta_relativa):
+    """Devuelve la ruta absoluta a un recurso, tanto en desarrollo como empaquetado con PyInstaller."""
+    try:
+        base_path = sys._MEIPASS  # carpeta temporal que usa PyInstaller en --onefile
+    except AttributeError:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, ruta_relativa)
 
 def cargar_icono(nombre, size=(20, 20)):
-    ruta = os.path.join("ui", "assets", "icons", nombre)
+    ruta = ruta_recurso(os.path.join("ui", "assets", "icons", nombre))
     img_blanca = Image.open(ruta).convert("RGBA")
 
     # Generamos la versión negra invirtiendo el color (no el alfa) para modo claro

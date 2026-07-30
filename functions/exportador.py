@@ -1,16 +1,3 @@
-"""
-exportador.py
-
-Genera los distintos formatos de exportación de Lumen:
-    - Excel individual por proveedor (con fórmulas de descuento/aumento).
-    - Hoja dentro de la base de datos anual (un libro con una hoja por proveedor).
-    - Archivo XLS compatible con Stock Fácil.
-
-Las hojas de Excel usan fórmulas nativas (no valores fijos) para que el
-vendedor pueda editar el % de descuento, aumento, valor del dólar, etc.
-directamente en Excel y los precios se recalculen solos.
-"""
-
 import os
 import re
 from datetime import datetime
@@ -292,7 +279,11 @@ def _guardar_excel_individual(
     nombre_archivo = f"{nombre_proveedor} - {marca_tiempo}.xlsx"
     ruta_final = os.path.join(carpeta_individuales, nombre_archivo)
 
-    libro.save(ruta_final)
+    try:
+        libro.save(ruta_final)
+    except PermissionError:
+        raise PermissionError(f"El archivo '{nombre_archivo}' está abierto. Cerralo y volvé a intentar.")
+
     return ruta_final
 
 
@@ -327,7 +318,11 @@ def _guardar_en_base_de_datos(
         valor_dolar, texto_descuento, texto_aumento,
     )
 
-    libro.save(ruta_bd)
+    try:
+        libro.save(ruta_bd)
+    except PermissionError:
+        raise PermissionError(f"El archivo '{nombre_archivo_bd}' está abierto. Cerralo y volvé a intentar.")
+
     return ruta_bd
 
 

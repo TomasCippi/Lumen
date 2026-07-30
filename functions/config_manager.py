@@ -2,13 +2,29 @@
 config_manager.py
 
 Manejo simple de configuración persistente para Lumen, guardada como un
-único JSON en la carpeta del usuario (~/.lumen/config.json).
+único JSON en la carpeta de Documentos del usuario
+(Documentos/Lumen/config.json).
 """
 
 import json
 from pathlib import Path
 
-CARPETA_CONFIG = Path.home() / ".lumen"
+def _obtener_carpeta_documentos() -> Path:
+    """Devuelve la carpeta 'Documentos' real del usuario en Windows,
+    incluso si está redirigida (ej. a OneDrive)."""
+    try:
+        import ctypes.wintypes
+        CSIDL_PERSONAL = 5  # constante de Windows para "Mis Documentos"
+        SHGFP_TYPE_CURRENT = 0
+        buffer = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
+        ctypes.windll.shell32.SHGetFolderPathW(None, CSIDL_PERSONAL, None, SHGFP_TYPE_CURRENT, buffer)
+        return Path(buffer.value)
+    except Exception:
+        # Fallback para no-Windows o si algo falla: usamos el estándar
+        return Path.home() / "Documents"
+
+
+CARPETA_CONFIG = _obtener_carpeta_documentos() / "Lumen"
 ARCHIVO_CONFIG = CARPETA_CONFIG / "config.json"
 
 

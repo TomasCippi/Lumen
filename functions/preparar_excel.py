@@ -102,13 +102,18 @@ def recalcular_formulas(ruta_archivo: str) -> str:
     excel.Visible = False
     excel.DisplayAlerts = False
 
+    libro = None
     try:
         libro = excel.Workbooks.Open(os.path.abspath(ruta_archivo))
         excel.CalculateFullRebuild()
         excel.CalculateUntilAsyncQueriesDone()
         libro.SaveAs(ruta_salida, FileFormat=51)  # 51 = xlOpenXMLWorkbook (.xlsx)
-        libro.Close(SaveChanges=False)
     finally:
+        if libro is not None:
+            try:
+                libro.Close(SaveChanges=False)
+            except Exception:
+                pass
         excel.Quit()
 
     return ruta_salida
