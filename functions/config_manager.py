@@ -1,11 +1,3 @@
-"""
-config_manager.py
-
-Manejo simple de configuración persistente para Lumen, guardada como un
-único JSON en la carpeta de Documentos del usuario
-(Documentos/Lumen/config.json).
-"""
-
 import json
 from pathlib import Path
 
@@ -59,3 +51,11 @@ def guardar_valor(clave: str, valor) -> None:
     config = _leer_config()
     config[clave] = valor
     _escribir_config(config)
+
+
+def eliminar_valor(clave: str) -> None:
+    """Elimina una clave del config, si existe."""
+    config = _leer_config()
+    if clave in config:
+        del config[clave]
+        _escribir_config(config)
