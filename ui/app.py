@@ -5,6 +5,7 @@ import os
 from ui.views.convertidor import ConvertidorView
 from ui.views.configuracion import ConfiguracionView
 from ui.views.informacion import InformacionView
+from ui.views.tiendaweb import TiendawebView
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -53,6 +54,7 @@ class App(ctk.CTk):
         # Vistas disponibles: nombre -> (clase, icono)
         self.views = {
             "Convertidor": (ConvertidorView, "convertidor.png"),
+            "Tienda Web": (TiendawebView, "tiendaweb.png"),
             "Configuración": (ConfiguracionView, "configuracion.png"),
             "Información": (InformacionView, "informacion.png"),
         }
