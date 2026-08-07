@@ -1,39 +1,24 @@
 import os
-import sys
-import customtkinter as ctk
 from tkinter import filedialog
-from PIL import Image
+
+import customtkinter as ctk
 
 from functions.config_manager import guardar_valor, obtener_valor, eliminar_valor
+from functions.prompt_config import CLAVE_PROMPT_CATALOGO, PROMPT_CATALOGO_POR_DEFECTO
 
 CLAVE_RUTA_STOCK_FACIL = "ruta_exportacion_stock_facil"
 CLAVE_RUTA_VENDEDOR = "ruta_exportacion_vendedor"
-CLAVE_API_KEY_GEMINI = "api_key_gemini"
-CLAVE_API_KEY_BORRADOR_FONDOS = "api_key_borrador_fondos"
-
-
-def _ruta_recurso(ruta_relativa):
-    """Devuelve la ruta absoluta a un recurso, tanto en desarrollo como empaquetado con PyInstaller."""
-    try:
-        base_path = sys._MEIPASS
-    except AttributeError:
-        base_path = os.path.abspath(".")
-    return os.path.join(base_path, ruta_relativa)
-
-
-def _cargar_logo(nombre, size=(20, 20)):
-    """Carga una imagen de assets/icons SIN invertir colores (para logos de marca, a diferencia de los íconos monocromáticos del menú)."""
-    ruta = _ruta_recurso(os.path.join("ui", "assets", "icons", nombre))
-    imagen = Image.open(ruta).convert("RGBA")
-    return ctk.CTkImage(light_image=imagen, dark_image=imagen, size=size)
-
 
 class ConfiguracionView(ctk.CTkFrame):
     def __init__(self, master):
         super().__init__(master, fg_color="transparent")
 
-        contenido = ctk.CTkFrame(self, fg_color="transparent", width=480)
-        contenido.pack(expand=True, pady=20)
+        exterior = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        exterior.pack(expand=True, fill="both")
+
+        contenido = ctk.CTkFrame(exterior, fg_color="transparent", width=520, height=750)
+        contenido.pack(pady=20)
+        contenido.pack_propagate(False)
 
         self._crear_titulo(contenido)
         self._crear_divisor(contenido)
@@ -50,24 +35,7 @@ class ConfiguracionView(ctk.CTkFrame):
         )
 
         self._crear_divisor(contenido)
-
-        self._crear_fila_api_key(
-            contenido,
-            titulo="API Key de Gemini",
-            clave_config=CLAVE_API_KEY_GEMINI,
-            icono_nombre="gemini.png",
-            texto_boton="Establecer API Key de Gemini",
-            texto_dialogo="Pegá tu API Key de Gemini:",
-        )
-
-        self._crear_fila_api_key(
-            contenido,
-            titulo="API Key de Borrador ",
-            clave_config=CLAVE_API_KEY_BORRADOR_FONDOS,
-            icono_nombre="fondo_borrar.png",
-            texto_boton="Establecer API Key de Borrador",
-            texto_dialogo="Pegá tu API Key para borrar fondos:",
-        )
+        self._crear_seccion_prompt(contenido)
 
     # ==================================================================
     #  TÍTULO Y DIVISOR
@@ -166,96 +134,77 @@ class ConfiguracionView(ctk.CTkFrame):
         )
 
     # ==================================================================
-    #  API KEYS (genérico: sirve para Gemini y Borrador de Fondos)
+    #  PROMPT DE TIENDA WEB (editable, persistente)
     # ==================================================================
 
-    def _crear_fila_api_key(self, padre, titulo, clave_config, icono_nombre, texto_boton, texto_dialogo):
+    def _crear_seccion_prompt(self, padre):
         bloque = ctk.CTkFrame(padre, fg_color="transparent")
         bloque.pack(fill="x", pady=(0, 24))
 
         ctk.CTkLabel(
             bloque,
-            text=titulo,
+            text="Prompt para clasificar el catálogo (Tienda Web)",
             font=ctk.CTkFont(size=13),
             text_color="gray",
         ).pack(anchor="w", pady=(0, 8))
 
-        fila_boton = ctk.CTkFrame(bloque, fg_color="transparent")
-        fila_boton.pack(anchor="w")
+        self.caja_prompt = ctk.CTkTextbox(
+            bloque,
+            height=280,
+            corner_radius=8,
+            font=ctk.CTkFont(family="Consolas", size=12),
+            wrap="word",
+        )
+        self.caja_prompt.pack(fill="x", pady=(0, 10))
 
-        icono = _cargar_logo(icono_nombre, size=(20, 20))
+        prompt_guardado = obtener_valor(CLAVE_PROMPT_CATALOGO, PROMPT_CATALOGO_POR_DEFECTO)
+        self.caja_prompt.insert("1.0", prompt_guardado)
 
-        boton = ctk.CTkButton(
-            fila_boton,
-            text=f"  {texto_boton}",
-            image=icono,
-            compound="left",
+        fila_botones = ctk.CTkFrame(bloque, fg_color="transparent")
+        fila_botones.pack(fill="x")
+
+        self.boton_guardar_prompt = ctk.CTkButton(
+            fila_botones,
+            text="💾  Guardar prompt",
             font=ctk.CTkFont(size=14, weight="bold"),
-            width=320,
+            height=42,
+            corner_radius=10,
+            fg_color="#3B8ED0",
+            hover_color="#2A6FA8",
+            command=self._guardar_prompt,
+        )
+        self.boton_guardar_prompt.pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        boton_restaurar = ctk.CTkButton(
+            fila_botones,
+            text="↺  Restaurar original",
+            font=ctk.CTkFont(size=14, weight="bold"),
             height=42,
             corner_radius=10,
             fg_color="gray30",
             hover_color="gray20",
-            anchor="w",
-            command=lambda: self._abrir_dialogo_api_key(boton, clave_config, texto_dialogo, texto_boton),
+            command=self._restaurar_prompt_por_defecto,
         )
-        boton.pack(side="left")
+        boton_restaurar.pack(side="left")
 
-        boton_borrar = ctk.CTkButton(
-            fila_boton,
-            text="✕",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            width=42,
-            height=42,
-            corner_radius=10,
-            fg_color="gray25",
-            hover_color="#C0392B",
-            command=lambda: self._borrar_api_key(boton, clave_config, texto_boton, icono),
-        )
-        boton_borrar.pack(side="left", padx=(8, 0))
+    def _guardar_prompt(self):
+        texto = self.caja_prompt.get("1.0", "end-1c")
+        guardar_valor(CLAVE_PROMPT_CATALOGO, texto)
 
-        clave_guardada = obtener_valor(clave_config)
-        if clave_guardada:
-            self._marcar_boton_con_api_key(boton, clave_guardada, icono)
-
-        return boton
-
-    def _abrir_dialogo_api_key(self, boton, clave_config, texto_dialogo, texto_boton):
-        dialogo = ctk.CTkInputDialog(
-            text=texto_dialogo,
-            title="API Key",
-        )
-        clave_ingresada = dialogo.get_input()
-
-        if not clave_ingresada:
-            return
-
-        clave_ingresada = clave_ingresada.strip()
-        guardar_valor(clave_config, clave_ingresada)
-
-        icono_actual = boton.cget("image")
-        self._marcar_boton_con_api_key(boton, clave_ingresada, icono_actual)
-
-    def _marcar_boton_con_api_key(self, boton, clave, icono):
-        clave_oculta = self._ocultar_clave(clave)
-        boton.configure(
-            text=f"  ✓  {clave_oculta}",
-            image=icono,
+        self.boton_guardar_prompt.configure(
+            text="✓  ¡Guardado con éxito!",
             fg_color="#2FA572",
             hover_color="#268A5F",
         )
+        self.after(2000, self._resetear_boton_guardar)
 
-    def _borrar_api_key(self, boton, clave_config, texto_boton, icono):
-        eliminar_valor(clave_config)
-        boton.configure(
-            text=f"  {texto_boton}",
-            image=icono,
-            fg_color="gray30",
-            hover_color="gray20",
+    def _resetear_boton_guardar(self):
+        self.boton_guardar_prompt.configure(
+            text="💾  Guardar prompt",
+            fg_color="#3B8ED0",
+            hover_color="#2A6FA8",
         )
 
-    def _ocultar_clave(self, clave):
-        """Muestra solo el principio y el final de la clave, ocultando el resto con puntos."""
-        if not clave or len(clave) <= 10:
-            return "•" * len(clave or "")
-        return f"{clave[:6]}{'•' * 8}{clave[-4:]}"
+    def _restaurar_prompt_por_defecto(self):
+        self.caja_prompt.delete("1.0", "end")
+        self.caja_prompt.insert("1.0", PROMPT_CATALOGO_POR_DEFECTO)
